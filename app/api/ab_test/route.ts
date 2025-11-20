@@ -1,14 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "edge"; // same style as the chatkit starter
+export const runtime = "edge";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
     const apiKey = process.env.OPENAI_API_KEY;
-    const workflowId = process.env.WORKFLOW_ID; // 👈 set this in Vercel env
+    // 👇 match the name you actually have in Vercel
+    const workflowId = process.env.ROADREHAB_WORKFLOW_ID;
 
     if (!apiKey) {
       return NextResponse.json(
@@ -19,12 +20,11 @@ export async function POST(req: NextRequest) {
 
     if (!workflowId) {
       return NextResponse.json(
-        { error: true, message: "Missing WORKFLOW_ID env variable" },
+        { error: true, message: "Missing ROADREHAB_WORKFLOW_ID env variable" },
         { status: 500 }
       );
     }
 
-    // Call the OpenAI Workflows API
     const openaiRes = await fetch(
       `https://api.openai.com/v1/workflows/${workflowId}/runs`,
       {
@@ -35,8 +35,7 @@ export async function POST(req: NextRequest) {
           "OpenAI-Beta": "workflows=v1",
         },
         body: JSON.stringify({
-          // The entire form payload from page.tsx
-          input: body,
+          input: body, // send the whole form payload to the workflow
         }),
       }
     );
@@ -44,7 +43,6 @@ export async function POST(req: NextRequest) {
     const text = await openaiRes.text();
 
     if (!openaiRes.ok) {
-      // Bubble up error details so you can see them in the UI
       return NextResponse.json(
         {
           error: true,
@@ -59,12 +57,9 @@ export async function POST(req: NextRequest) {
     try {
       json = text ? JSON.parse(text) : null;
     } catch {
-      // If response isn’t valid JSON, just return raw text
       return NextResponse.json({ raw: text }, { status: 200 });
     }
 
-    // You can reshape this if your workflow returns a specific structure,
-    // but for now we just pass it straight back to the frontend.
     return NextResponse.json(json, { status: 200 });
   } catch (err: any) {
     console.error("Error in /api/ab_test:", err);
