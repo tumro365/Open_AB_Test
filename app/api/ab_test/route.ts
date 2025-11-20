@@ -20,9 +20,7 @@ export async function POST(req: Request) {
 
     const body = {
       input: {
-        // Adjust to match how your workflow expects inputs.
-        // Here we just send the whole form as JSON text.
-        form_json: form,
+        input_as_text: JSON.stringify(form),
       },
     };
 
