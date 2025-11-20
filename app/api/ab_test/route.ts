@@ -3,14 +3,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 
-// Create OpenAI client using your API key from env vars
+// Create OpenAI client using your API key from Vercel env vars
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
-    // 🔑 This MUST match the key name in Vercel exactly
+    // 🔑 This MUST match the env var name in Vercel exactly
     const WORKFLOW_ID = process.env.ROADREHAB_WORKFLOW_ID;
 
     if (!WORKFLOW_ID) {
@@ -23,19 +23,40 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Body from the form – we just forward it straight to the workflow
-    const input = await req.json();
+    // Read JSON body from the form POST
+    const body = (await req.json()) as any;
 
-    // Call your RoadRehab workflow
-    const run = await client.workflows.runs.create({
+    // Support several possible shapes from the UI
+    const input =
+      body.formValues ?? body.formData ?? body.input ?? body.payload ?? body;
+
+    if (!input) {
+      return NextResponse.json(
+        {
+          error: true,
+          message:
+            "No input payload found in request body (expected formValues / formData / input).",
+        },
+        { status: 400 }
+      );
+    }
+
+    // 🚀 Call your Agent Builder workflow
+    const run = await client.beta.workflows.runs.create({
       workflow_id: WORKFLOW_ID,
-      input, // this will be the JSON your page.tsx sends
+      input, // send the full form payload into the workflow
     });
 
-    // Return whatever the workflow run returns
-    return NextResponse.json(run);
+    // You can shape this however you like – for now just return the run object
+    return NextResponse.json(
+      {
+        error: false,
+        run,
+      },
+      { status: 200 }
+    );
   } catch (err: any) {
-    console.error("Error calling workflow:", err);
+    console.error("Workflow API error:", err);
 
     return NextResponse.json(
       {
