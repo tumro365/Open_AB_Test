@@ -133,9 +133,11 @@ export default function RoadRehabPage() {
       });
 
       if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || "Request failed");
-      }
+      const text = await res.text();
+      throw new Error(
+      text || `Request failed with status ${res.status}`
+        );
+      }    
 
       const data: unknown = await res.json();
 
