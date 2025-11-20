@@ -1,29 +1,29 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+// app/api/ab_test/route.ts
 import { NextResponse } from "next/server";
 
-interface RoadRehabFormPayload {
+interface AbTestFormPayload {
   [key: string]: unknown;
 }
 
-const WORKFLOW_ID = process.env.ROADREHAB_WORKFLOW_ID;
+// Use whatever env var name you like for this workflow
+const WORKFLOW_ID = process.env.AB_TEST_WORKFLOW_ID;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 export async function POST(req: Request) {
   try {
     if (!WORKFLOW_ID) {
-      return new NextResponse("ROADREHAB_WORKFLOW_ID is not set", { status: 500 });
+      return new NextResponse("AB_TEST_WORKFLOW_ID is not set", { status: 500 });
     }
     if (!OPENAI_API_KEY) {
       return new NextResponse("OPENAI_API_KEY is not set", { status: 500 });
     }
 
-    const form: RoadRehabFormPayload = (await req.json()) as RoadRehabFormPayload;
+    const form: AbTestFormPayload = (await req.json()) as AbTestFormPayload;
 
-    // Adjust this "input" shape to what your workflow expects.
-    // Here we send the whole form plus a source tag.
+    // 👇 Shape this to match your workflow's input
     const body = {
       input: {
-        source: "roadrehab-web-form",
+        source: "ab_test_web_form",
         form,
       },
     };
@@ -65,7 +65,7 @@ export async function POST(req: Request) {
     console.log("Workflow success:", json);
     return NextResponse.json(json);
   } catch (err) {
-    console.error("API route error in /api/roadrehab:", err);
+    console.error("API route error in /api/ab_test:", err);
     const message = err instanceof Error ? err.message : "Unexpected server error";
     return NextResponse.json({ error: true, message }, { status: 500 });
   }
