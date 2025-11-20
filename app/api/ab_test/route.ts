@@ -1,32 +1,35 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+
+interface RoadRehabFormPayload {
+  [key: string]: unknown;
+}
 
 const WORKFLOW_ID = process.env.ROADREHAB_WORKFLOW_ID;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   if (!WORKFLOW_ID || !OPENAI_API_KEY) {
-    return NextResponse.json(
-      { error: "Missing ROADREHAB_WORKFLOW_ID or OPENAI_API_KEY" },
-      { status: 500 }
-    );
+    return new NextResponse("Missing ROADREHAB_WORKFLOW_ID or OPENAI_API_KEY", {
+      status: 500,
+    });
   }
 
   try {
-    const { form } = await req.json();
+    const form: RoadRehabFormPayload = (await req.json()) as RoadRehabFormPayload;
 
-    // Your workflow currently expects a single string input called "input_as_text".
-    // We send the form JSON as a string into that variable.
     const body = {
       input: {
-        input_as_text: JSON.stringify(form),
+        // Adjust to match how your workflow expects inputs.
+        // Here we just send the whole form as JSON text.
+        form_json: form,
       },
     };
 
     const res = await fetch(`https://api.openai.com/v1/workflows/${WORKFLOW_ID}/runs`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json",
         "OpenAI-Beta": "workflows=v1",
       },
@@ -35,19 +38,17 @@ export async function POST(req: NextRequest) {
 
     if (!res.ok) {
       const text = await res.text();
-      console.error("Workflow error", text);
-      return NextResponse.json({ error: text }, { status: res.status });
+      console.error("Workflow error:", text);
+      return new NextResponse(text || "Workflow call failed", { status: 500 });
     }
 
-    const data = await res.json();
+    const data: unknown = await res.json();
 
-    // For now, just pass the whole workflow response straight back.
+    // Return the full workflow response; the page will try to display "output"
     return NextResponse.json(data);
-  } catch (err: any) {
+  } catch (err) {
     console.error(err);
-    return NextResponse.json(
-      { error: err?.message || "Unexpected server error" },
-      { status: 500 }
-    );
+    const message = err instanceof Error ? err.message : "Unexpected server error";
+    return new NextResponse(message, { status: 500 });
   }
 }
