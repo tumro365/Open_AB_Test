@@ -3,18 +3,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 
-// Create OpenAI client using your API key from Vercel env vars
+// Create OpenAI client using your API key from env vars
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     // 🔑 This MUST match the key name in Vercel exactly
     const WORKFLOW_ID = process.env.ROADREHAB_WORKFLOW_ID;
 
     if (!WORKFLOW_ID) {
-      console.error("ROADREHAB_WORKFLOW_ID is not set in environment");
       return NextResponse.json(
         {
           error: true,
@@ -24,37 +23,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Body sent from page.tsx (all your form fields)
-    const formData = await req.json();
+    // Body from the form – we just forward it straight to the workflow
+    const input = await req.json();
 
-    // Call your OpenAI workflow
+    // Call your RoadRehab workflow
     const run = await client.workflows.runs.create({
       workflow_id: WORKFLOW_ID,
-      input: {
-        form: formData,
-      },
+      input, // this will be the JSON your page.tsx sends
     });
 
-    // You can either:
-    // 1) just return the run (and poll separately), OR
-    // 2) poll until it completes. For now, just return the run info.
-
-    return NextResponse.json(
-      {
-        error: false,
-        runId: run.id,
-        status: run.status,
-        data: run,
-      },
-      { status: 200 }
-    );
+    // Return whatever the workflow run returns
+    return NextResponse.json(run);
   } catch (err: any) {
-    console.error("Route error:", err);
+    console.error("Error calling workflow:", err);
 
     return NextResponse.json(
       {
         error: true,
-        message: err?.message || "Unknown error calling workflow",
+        message: err?.message ?? "Unknown error calling workflow",
       },
       { status: 500 }
     );
