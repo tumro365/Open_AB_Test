@@ -1,53 +1,70 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import OpenAI from "openai";
 
-export async function POST(req: Request) {
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+export async function POST(req: NextRequest) {
   try {
+    const WORKFLOW_ID = process.env.ROADREHAB_WORKFLOW_ID;
+
+    if (!WORKFLOW_ID) {
+      return NextResponse.json(
+        {
+          error: true,
+          message: "Missing ROADREHAB_WORKFLOW_ID env variable",
+        },
+        { status: 500 }
+      );
+    }
+
     const body = await req.json();
 
-    const workflowId = process.env.ROADREHAB_WORKFLOW_ID;
-    const apiKey = process.env.OPENAI_API_KEY;
+    // This should match the input variable name in your workflow Start node
+    const workflowInputs = {
+      input_as_text: JSON.stringify(body, null, 2),
+    };
 
-    if (!workflowId) {
-      return NextResponse.json(
-        { error: true, message: "Missing ROADREHAB_WORKFLOW_ID env variable" },
-        { status: 500 }
-      );
-    }
-
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: true, message: "Missing OPENAI_API_KEY env variable" },
-        { status: 500 }
-      );
-    }
-
-    // WORKFLOW RUN REQUEST (CORRECT ENDPOINT)
-    const response = await fetch(`https://api.openai.com/v1/workflows/runs`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        workflow_id: workflowId,
-        input: body, // send the form itself
-      }),
+    const run = await client.workflows.runs.create({
+      workflow_id: WORKFLOW_ID,
+      inputs: workflowInputs,
     });
 
-    const result = await response.json();
+    // Poll until the workflow finishes
+    let result = await client.workflows.runs.get(run.id);
 
-    if (!response.ok) {
+    while (result.status === "running" || result.status === "queued") {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      result = await client.workflows.runs.get(run.id);
+    }
+
+    if (result.status !== "completed") {
       return NextResponse.json(
-        { error: true, details: result },
-        { status: response.status }
+        {
+          error: true,
+          message: `Workflow failed with status: ${result.status}`,
+        },
+        { status: 500 }
       );
     }
 
-    return NextResponse.json(result, { status: 200 });
-  } catch (err: any) {
     return NextResponse.json(
-      { error: true, message: err.message },
+      {
+        error: false,
+        result,
+      },
+      { status: 200 }
+    );
+  } catch (err: any) {
+    console.error("API error:", err);
+    return NextResponse.json(
+      {
+        error: true,
+        message: err?.message ?? "Unknown error",
+        details: err,
+      },
       { status: 500 }
     );
   }
