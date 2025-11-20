@@ -3,17 +3,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 
-// Create OpenAI client using your API key from Vercel env vars
+// Create OpenAI client
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-export async function POST(req: NextRequest): Promise<NextResponse> {
+export async function POST(req: NextRequest) {
   try {
-    // 🔑 This MUST match the env var name in Vercel exactly
-    const WORKFLOW_ID = process.env.ROADREHAB_WORKFLOW_ID;
+    // Must match your Vercel env var EXACTLY
+    const workflowId = process.env.ROADREHAB_WORKFLOW_ID;
 
-    if (!WORKFLOW_ID) {
+    if (!workflowId) {
       return NextResponse.json(
         {
           error: true,
@@ -23,31 +23,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Read JSON body from the form POST
-    const body = (await req.json()) as any;
+    // Read JSON body from form submit
+    const input: any = await req.json();
 
-    // Support several possible shapes from the UI
-    const input =
-      body.formValues ?? body.formData ?? body.input ?? body.payload ?? body;
-
-    if (!input) {
-      return NextResponse.json(
-        {
-          error: true,
-          message:
-            "No input payload found in request body (expected formValues / formData / input).",
-        },
-        { status: 400 }
-      );
-    }
-
-    // 🚀 Call your Agent Builder workflow
-    const run = await client.beta.workflows.runs.create({
-      workflow_id: WORKFLOW_ID,
-      input, // send the full form payload into the workflow
+    // Create workflow run
+    const run = await client.workflows.runs.create({
+      workflow_id: workflowId,
+      input,
     });
 
-    // You can shape this however you like – for now just return the run object
     return NextResponse.json(
       {
         error: false,
@@ -56,12 +40,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       { status: 200 }
     );
   } catch (err: any) {
-    console.error("Workflow API error:", err);
-
     return NextResponse.json(
       {
         error: true,
-        message: err?.message ?? "Unknown error calling workflow",
+        message: err?.message || "Unknown server error",
       },
       { status: 500 }
     );
