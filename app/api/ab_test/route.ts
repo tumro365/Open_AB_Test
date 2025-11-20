@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
 
     const apiKey = process.env.OPENAI_API_KEY;
     // 👇 match the name you actually have in Vercel
-    const workflowId = process.env.ROADREHAB_WORKFLOW_ID;
+    const workflowId = process.env.WORKFLOW_ID;
 
     if (!apiKey) {
       return NextResponse.json(
