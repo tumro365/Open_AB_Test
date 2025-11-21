@@ -1,5 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
+// app/api/ab_test/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 
@@ -7,68 +6,37 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Run this route on the edge like the starter
-export const runtime = "edge";
-
-export async function POST(req: NextRequest): Promise<NextResponse> {
+export async function POST(req: NextRequest) {
   try {
-    const workflowId = process.env.ROADREHAB_WORKFLOW_ID;
+    const body = await req.json();
+
+    // Expecting the client to send at least a workflowId and some inputs
+    const { workflowId, inputs } = body;
+
     if (!workflowId) {
       return NextResponse.json(
-        {
-          error: true,
-          message: "Missing ROADREHAB_WORKFLOW_ID env variable",
-        },
-        { status: 500 },
+        { error: "Missing required field: workflowId" },
+        { status: 400 }
       );
     }
 
-    // We expect the front-end to send { payload: ... }
-    const body = (await req.json()) as { payload: unknown };
-
-    // Turn whatever we get into a single string for `input_as_text`
-    let inputText: string;
-
-    if (typeof body.payload === "string") {
-      inputText = body.payload;
-    } else {
-      // nice pretty JSON the agent can read
-      inputText = JSON.stringify(body.payload, null, 2);
-    }
-
+    // @ts-ignore – workflows is available at runtime but missing from the current OpenAI TypeScript types
     const run = await client.workflows.runs.create({
       workflow_id: workflowId,
-      inputs: {
-        // 🔑 this MUST match the Start node input name
-        input_as_text: inputText,
-      },
+      // This MUST match what your workflow Start node expects
+      inputs: inputs ?? {},
     });
 
-    // For workflows with "Text" output format, this will be populated
-    const output = (run as any).output_text ?? (run as any).output ?? null;
+    return NextResponse.json(run, { status: 200 });
+  } catch (error: any) {
+    console.error("Error running workflow:", error);
 
     return NextResponse.json(
       {
-        success: true,
-        output,
-        runId: run.id,
+        error: "Failed to run workflow",
+        details: error?.message ?? "Unknown error",
       },
-      { status: 200 },
-    );
-  } catch (err: unknown) {
-    console.error("Error calling workflow:", err);
-
-    let message = "Unknown error";
-    if (err && typeof err === "object" && "message" in err) {
-      message = String((err as any).message);
-    }
-
-    return NextResponse.json(
-      {
-        error: true,
-        message,
-      },
-      { status: 400 },
+      { status: 500 }
     );
   }
 }
