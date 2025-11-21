@@ -1,209 +1,222 @@
 "use client";
 
-import { useState } from "react";
+import React, {
+  ChangeEvent,
+  FormEvent,
+  useState,
+} from "react";
 
-type RoadRehabFormData = {
-  projectName: string;
-  roadName: string;
-  client: string;
-  designer: string;
-  riskSummary: string;
-  riskTypes: string;
-  riskBudget: string;
+type RoadRehabForm = {
+  [key: string]: string;
+};
+
+const initialForm: RoadRehabForm = {
+  projectName: "",
+  roadName: "",
+  location: "",
+  trafficVolumes: "",
+  heavyVehiclePercent: "",
+  pavementCondition: "",
+  deflectionData: "",
+  structuralIssues: "",
+  drainageIssues: "",
+  constraints: "",
+  designObjectives: "",
+  preferredTreatmentTypes: "",
+  budgetRange: "",
+  programmeConstraints: "",
+  riskSummary: "",
+  keyRiskTypes: "",
+  riskBudget: "",
 };
 
 export default function RoadRehabPage() {
-  const [formData, setFormData] = useState<RoadRehabFormData>({
-    projectName: "",
-    roadName: "",
-    client: "",
-    designer: "",
-    riskSummary: "",
-    riskTypes: "",
-    riskBudget: "",
-  });
-
-  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState<RoadRehabForm>(initialForm);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<any>(null);
+  const [output, setOutput] = useState<string>("");
 
-  function handleChange(
-    field: keyof RoadRehabFormData,
-    value: string
-  ) {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-  }
+  const handleChange = (
+    event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ): void => {
+    const { name, value } = event.target;
+    setFormData((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
+  };
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
+  const handleSubmit = async (
+    event: FormEvent<HTMLFormElement>
+  ): Promise<void> => {
+    event.preventDefault();
+    setIsLoading(true);
     setError(null);
-    setResult(null);
+    setOutput("");
 
     try {
-      const res = await fetch("/api/ab_test", {
+      const response = await fetch("/api/ab_test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ formData }),
+        body: JSON.stringify(formData),
       });
 
-      const data = await res.json();
+      const data: unknown = await response.json();
 
-      if (!res.ok) {
-        setError(
-          data?.message ||
-            data?.error ||
-            `Request failed with status ${res.status}`
-        );
-      } else {
-        setResult(data);
+      if (!response.ok) {
+        const message =
+          typeof data === "object" &&
+          data !== null &&
+          "message" in data &&
+          typeof (data as { message?: unknown }).message === "string"
+            ? ((data as { message: string }).message)
+            : "Request failed";
+
+        throw new Error(message);
       }
-    } catch (err: any) {
-      setError(err?.message || "Network error");
+
+      // Try to extract something readable from the workflow result
+      let textOutput = "";
+
+      if (
+        typeof data === "object" &&
+        data !== null &&
+        "result" in data
+      ) {
+        const result = (data as { result?: unknown }).result;
+
+        if (
+          typeof result === "object" &&
+          result !== null &&
+          "output" in result &&
+          typeof (result as { output?: unknown }).output === "string"
+        ) {
+          textOutput = (result as { output: string }).output;
+        }
+      }
+
+      if (!textOutput) {
+        textOutput = JSON.stringify(data, null, 2);
+      }
+
+      setOutput(textOutput);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Unknown error";
+      setError(message);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
-    <main className="min-h-screen bg-slate-50 flex justify-center py-10">
-      <div className="w-full max-w-3xl bg-white shadow-md rounded-xl p-8 space-y-6">
-        <h1 className="text-2xl font-semibold">
-          RoadRehab – Pavement Design Inputs
-        </h1>
+    <main className="mx-auto max-w-4xl px-4 py-10">
+      <h1 className="mb-6 text-3xl font-semibold">
+        RoadRehab design form
+      </h1>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Basic project info */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Project name
-              </label>
-              <input
-                className="w-full border rounded-md px-3 py-2"
-                value={formData.projectName}
-                onChange={(e) =>
-                  handleChange("projectName", e.target.value)
-                }
-                placeholder="e.g. Burma Road Rehab 2025"
-              />
-            </div>
+      <form onSubmit={handleSubmit} className="space-y-8">
+        {/* 1. Project details */}
+        <section className="space-y-3 rounded-lg border p-4">
+          <h2 className="text-lg font-semibold">1. Project details</h2>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Road / site name
-              </label>
-              <input
-                className="w-full border rounded-md px-3 py-2"
-                value={formData.roadName}
-                onChange={(e) =>
-                  handleChange("roadName", e.target.value)
-                }
-                placeholder="e.g. Burma Road"
-              />
-            </div>
+          <label className="block text-sm font-medium">
+            Project name
+            <input
+              name="projectName"
+              value={formData.projectName}
+              onChange={handleChange}
+              className="mt-1 w-full rounded border px-3 py-2 text-sm"
+            />
+          </label>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Client / RCA
-              </label>
-              <input
-                className="w-full border rounded-md px-3 py-2"
-                value={formData.client}
-                onChange={(e) =>
-                  handleChange("client", e.target.value)
-                }
-                placeholder="e.g. NZTA / Local Council"
-              />
-            </div>
+          <label className="block text-sm font-medium">
+            Road name / route
+            <input
+              name="roadName"
+              value={formData.roadName}
+              onChange={handleChange}
+              className="mt-1 w-full rounded border px-3 py-2 text-sm"
+            />
+          </label>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Designer
-              </label>
-              <input
-                className="w-full border rounded-md px-3 py-2"
-                value={formData.designer}
-                onChange={(e) =>
-                  handleChange("designer", e.target.value)
-                }
-                placeholder="Your name"
-              />
-            </div>
-          </div>
+          <label className="block text-sm font-medium">
+            Location
+            <input
+              name="location"
+              value={formData.location}
+              onChange={handleChange}
+              className="mt-1 w-full rounded border px-3 py-2 text-sm"
+            />
+          </label>
+        </section>
 
-          {/* Risk & risk profiling */}
-          <div className="pt-4 border-t">
-            <h2 className="text-lg font-semibold mb-2">
-              7. Risk &amp; risk profiling
-            </h2>
+        {/* 7. Risk & risk profiling – the section you screenshot */}
+        <section className="space-y-3 rounded-lg border p-4">
+          <h2 className="text-lg font-semibold">
+            7. Risk &amp; risk profiling
+          </h2>
 
-            <label className="block text-sm font-medium mb-1">
-              Risk profile (summary)
-            </label>
+          <label className="block text-sm font-medium">
+            Risk profile (summary)
             <textarea
-              className="w-full border rounded-md px-3 py-2 mb-3"
-              rows={2}
+              name="riskSummary"
               value={formData.riskSummary}
-              onChange={(e) =>
-                handleChange("riskSummary", e.target.value)
-              }
+              onChange={handleChange}
+              className="mt-1 w-full rounded border px-3 py-2 text-sm"
+              rows={3}
               placeholder="Describe overall project risk profile: delivery risk, network risk, safety risk, etc."
             />
+          </label>
 
-            <label className="block text-sm font-medium mb-1">
-              Key risk types
-            </label>
+          <label className="block text-sm font-medium">
+            Key risk types
             <textarea
-              className="w-full border rounded-md px-3 py-2 mb-3"
-              rows={2}
-              value={formData.riskTypes}
-              onChange={(e) =>
-                handleChange("riskTypes", e.target.value)
-              }
+              name="keyRiskTypes"
+              value={formData.keyRiskTypes}
+              onChange={handleChange}
+              className="mt-1 w-full rounded border px-3 py-2 text-sm"
+              rows={3}
               placeholder="e.g. geotechnical, drainage, constructability, traffic, stakeholder, cost escalation."
             />
+          </label>
 
-            <label className="block text-sm font-medium mb-1">
-              Optional – budget for risk profiling
-            </label>
+          <label className="block text-sm font-medium">
+            Optional – budget for risk profiling
             <input
-              className="w-full border rounded-md px-3 py-2"
+              name="riskBudget"
               value={formData.riskBudget}
-              onChange={(e) =>
-                handleChange("riskBudget", e.target.value)
-              }
+              onChange={handleChange}
+              className="mt-1 w-full rounded border px-3 py-2 text-sm"
               placeholder="e.g. $1.2M, or range 1.0–1.5M, or unknown"
             />
-          </div>
+          </label>
+        </section>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="mt-4 inline-flex items-center justify-center rounded-md bg-slate-900 px-6 py-2 text-sm font-medium text-white disabled:opacity-60"
-          >
-            {loading ? "Generating RoadRehab design…" : "Generate RoadRehab design"}
-          </button>
-        </form>
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="rounded bg-sky-900 px-6 py-3 text-sm font-semibold text-white disabled:opacity-60"
+        >
+          {isLoading ? "Generating design…" : "Generate RoadRehab design"}
+        </button>
+      </form>
 
-        {/* Error / Output */}
+      <section className="mt-8 space-y-3">
         {error && (
-          <div className="mt-4 rounded-md bg-red-50 border border-red-300 px-4 py-3 text-sm text-red-700">
-            Request failed: {error}
-          </div>
+          <p className="rounded border border-red-400 bg-red-50 px-3 py-2 text-sm text-red-800">
+            {error}
+          </p>
         )}
 
-        {result && (
-          <div className="mt-4">
-            <h2 className="text-lg font-semibold mb-2">
-              RoadRehab design output
-            </h2>
-            <pre className="text-xs bg-slate-900 text-slate-50 rounded-md p-4 overflow-auto max-h-80">
-              {JSON.stringify(result, null, 2)}
-            </pre>
-          </div>
-        )}
-      </div>
+        <h2 className="text-lg font-semibold">
+          RoadRehab design output
+        </h2>
+
+        <pre className="min-h-[160px] whitespace-pre-wrap rounded border bg-slate-50 p-4 text-sm">
+          {output || "Output will appear here after you generate a design."}
+        </pre>
+      </section>
     </main>
   );
 }
