@@ -6,11 +6,25 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Minimal type describing just the workflow bit we need
+type WorkflowClient = {
+  workflows: {
+    runs: {
+      create: (args: {
+        workflow_id: string;
+        inputs: { type: "input_json"; data: unknown };
+      }) => Promise<unknown>;
+    };
+  };
+};
+
+// Tell TypeScript to treat the client as a WorkflowClient for this route
+const wfClient = client as unknown as WorkflowClient;
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const workflowId = process.env.ROADREHAB_WORKFLOW_ID;
 
-    // Guard: make sure env var exists
     if (!workflowId) {
       return NextResponse.json(
         {
@@ -21,10 +35,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Whatever the form sends, just forward as JSON into the workflow
     const body = await req.json();
 
-    const run = await client.workflows.runs.create({
+    const run = await wfClient.workflows.runs.create({
       workflow_id: workflowId,
       inputs: {
         type: "input_json",
@@ -32,7 +45,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       },
     });
 
-    // For now just return the whole run object
     return NextResponse.json(
       {
         success: true,
