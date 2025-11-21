@@ -1,5 +1,7 @@
-import App from "./App";
+// app/page.tsx
+import RoadRehabForm from "./ab_test/page";
 
 export default function Home() {
-  return <App />;
+  // Just render the RoadRehab form as the main page
+  return <RoadRehabForm />;
 }
