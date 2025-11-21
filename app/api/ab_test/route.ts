@@ -25,13 +25,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Be forgiving about the shape:
-    //  - if caller sent { inputs: {...} } we use that
-    //  - otherwise we just send the whole body as inputs
     const inputs = body?.inputs ?? body ?? {};
 
-    // @ts-ignore – workflows is available at runtime but missing from the current OpenAI TypeScript types
-    const run = await client.workflows.runs.create({
+    // --- Guard: make sure the SDK actually has workflows support ---
+    const anyClient = client as any;
+    if (
+      !anyClient.workflows ||
+      !anyClient.workflows.runs ||
+      !anyClient.workflows.runs.create
+    ) {
+      throw new Error(
+        "OpenAI SDK does not support `client.workflows` – upgrade the `openai` package (e.g. `openai@^5.1.0`)."
+      );
+    }
+
+    // @ts-ignore – workflows types may lag SDK features
+    const run = await anyClient.workflows.runs.create({
       workflow_id: workflowId,
       inputs,
     });
@@ -40,11 +49,9 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error("Error running workflow:", error);
 
-    // Surface a slightly more helpful error back to the frontend
     return NextResponse.json(
       {
         error: "Failed to run workflow",
-        // This won't show in your button UI, but will be visible in the browser Network tab
         details: error?.message ?? "Unknown error",
       },
       { status: 500 }
