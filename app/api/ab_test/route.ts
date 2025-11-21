@@ -8,50 +8,33 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 });
 
-// Optional, but makes sure this runs on the server
-export const dynamic = "force-dynamic";
-
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
-    // Get workflow id from env var
-    const workflowId = process.env.ROADREHAB_WORKFLOW_ID;
+    // This MUST match the key name in Vercel exactly  
+    const WORKFLOW_ID = process.env.ROADREHAB_WORKFLOW_ID;
 
-    if (!workflowId) {
+    if (!WORKFLOW_ID) {
       return NextResponse.json(
         { error: true, message: "Missing ROADREHAB_WORKFLOW_ID env variable" },
         { status: 500 }
       );
     }
 
-    // Read JSON body from the frontend
-    const body = (await request.json().catch(() => null)) as any;
+    // Parse the JSON body from the UI form
+    const body = await req.json();
 
-    if (!body || typeof body !== "object") {
-      return NextResponse.json(
-        { error: true, message: "Invalid request body" },
-        { status: 400 }
-      );
-    }
-
-    // We expect the frontend to POST: { formData: { ...all your fields... } }
-    const input = body.formData ?? body;
-
-    // Call the workflow
-    const run = await client.beta.workflows.runs.create({
-      workflow_id: workflowId,
-      input, // whatever you posted from the UI
+    // Start the workflow run
+    const run = await client.workflows.runs.create({
+      workflow_id: WORKFLOW_ID,
+      inputs: body, // ← JSON payload from UI
     });
 
-    // Return the whole run object to the UI
-    return NextResponse.json(run);
+    // Return the workflow run ID so we can poll for completion
+    return NextResponse.json({ success: true, runId: run.id });
   } catch (err: any) {
-    console.error("Error in /api/ab_test:", err);
-
+    console.error("Workflow error:", err);
     return NextResponse.json(
-      {
-        error: true,
-        message: err?.message ?? "Unknown error calling workflow",
-      },
+      { error: true, message: err.message ?? "Unknown error" },
       { status: 500 }
     );
   }
