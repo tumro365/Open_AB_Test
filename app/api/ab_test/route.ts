@@ -1,130 +1,74 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { NextRequest, NextResponse } from "next/server";
+import OpenAI from "openai";
 
-// Read env variables once
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const ROADREHAB_WORKFLOW_ID = process.env.ROADREHAB_WORKFLOW_ID;
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
-// Log if something is missing (helps debugging in Vercel logs)
-if (!OPENAI_API_KEY) {
-  console.error("❌ Missing OPENAI_API_KEY env variable");
-}
-if (!ROADREHAB_WORKFLOW_ID) {
-  console.error("❌ Missing ROADREHAB_WORKFLOW_ID env variable");
-}
+// Run this route on the edge like the starter
+export const runtime = "edge";
 
-// Shape of the request body we expect from the frontend
-interface ApiRequestBody {
-  input: unknown;
-}
-
-// Shape of what we send back to the frontend
-interface ApiSuccessResponse {
-  success: true;
-  data: unknown;
-}
-
-interface ApiErrorResponse {
-  success: false;
-  error: string;
-}
-
-type ApiResponse = ApiSuccessResponse | ApiErrorResponse;
-
-export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse>> {
+export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
-    if (!OPENAI_API_KEY || !ROADREHAB_WORKFLOW_ID) {
+    const workflowId = process.env.ROADREHAB_WORKFLOW_ID;
+    if (!workflowId) {
       return NextResponse.json(
         {
-          success: false,
-          error: "Server configuration error: missing OPENAI_API_KEY or ROADREHAB_WORKFLOW_ID",
+          error: true,
+          message: "Missing ROADREHAB_WORKFLOW_ID env variable",
         },
         { status: 500 },
       );
     }
 
-    const bodyJson = (await req.json()) as unknown;
+    // We expect the front-end to send { payload: ... }
+    const body = (await req.json()) as { payload: unknown };
 
-    // Basic validation: we expect { input: ... }
-    if (
-      !bodyJson ||
-      typeof bodyJson !== "object" ||
-      !("input" in bodyJson)
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Invalid request body: expected an object with an 'input' property.",
-        },
-        { status: 400 },
-      );
+    // Turn whatever we get into a single string for `input_as_text`
+    let inputText: string;
+
+    if (typeof body.payload === "string") {
+      inputText = body.payload;
+    } else {
+      // nice pretty JSON the agent can read
+      inputText = JSON.stringify(body.payload, null, 2);
     }
 
-    const body = bodyJson as ApiRequestBody;
-
-    // Call the OpenAI Workflows REST API directly.
-    // NOTE: Correct endpoint is /v1/workflows/runs (workflow_id goes in the body).
-    const workflowResponse = await fetch("https://api.openai.com/v1/workflows/runs", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        "OpenAI-Beta": "workflows=v1",
+    const run = await client.workflows.runs.create({
+      workflow_id: workflowId,
+      inputs: {
+        // 🔑 this MUST match the Start node input name
+        input_as_text: inputText,
       },
-      body: JSON.stringify({
-        workflow_id: ROADREHAB_WORKFLOW_ID,
-        inputs: {
-          input_json: body.input,
-        },
-      }),
     });
 
-    if (!workflowResponse.ok) {
-      // Try to read error payload from OpenAI if present
-      let message = `Workflow request failed with status ${workflowResponse.status}`;
+    // For workflows with "Text" output format, this will be populated
+    const output = (run as any).output_text ?? (run as any).output ?? null;
 
-      try {
-        const errorJson = (await workflowResponse.json()) as {
-          error?: { message?: string };
-        };
-        if (errorJson?.error?.message) {
-          message = errorJson.error.message;
-        }
-      } catch {
-        // ignore JSON parsing failures, keep generic message
-      }
-
-      return NextResponse.json(
-        {
-          success: false,
-          error: message,
-        },
-        { status: workflowResponse.status },
-      );
-    }
-
-    const resultJson = (await workflowResponse.json()) as unknown;
-
-    // We just pass the full workflow JSON back for now;
-    // the UI can decide how to render it.
     return NextResponse.json(
       {
         success: true,
-        data: resultJson,
+        output,
+        runId: run.id,
       },
       { status: 200 },
     );
-  } catch (error) {
-    console.error("Error calling RoadRehab workflow:", error);
+  } catch (err: unknown) {
+    console.error("Error calling workflow:", err);
 
-    const message =
-      error instanceof Error ? error.message : "Unknown server error while running workflow";
+    let message = "Unknown error";
+    if (err && typeof err === "object" && "message" in err) {
+      message = String((err as any).message);
+    }
 
     return NextResponse.json(
       {
-        success: false,
-        error: message,
+        error: true,
+        message,
       },
-      { status: 500 },
+      { status: 400 },
     );
   }
 }
