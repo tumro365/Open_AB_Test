@@ -1,17 +1,14 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment, @typescript-eslint/no-explicit-any */
 
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const OPENAI_API_BASE = "https://api.openai.com/v1";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as any;
+    const body = (await req.json().catch(() => ({}))) as any;
 
-    // Try to get workflow id from the request body OR from env
+    // Get workflow id from request body OR from env
     const workflowId =
       body?.workflowId || process.env.NEXT_PUBLIC_CHATKIT_WORKFLOW_ID;
 
@@ -25,27 +22,41 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Whatever the form sent in becomes inputs (or body.inputs if present)
     const inputs = body?.inputs ?? body ?? {};
 
-    // --- Guard: make sure the SDK actually has workflows support ---
-    const anyClient = client as any;
-    if (
-      !anyClient.workflows ||
-      !anyClient.workflows.runs ||
-      !anyClient.workflows.runs.create
-    ) {
-      throw new Error(
-        "OpenAI SDK does not support `client.workflows` – upgrade the `openai` package (e.g. `openai@^5.1.0`)."
+    // 🔥 Call the Workflows HTTP API directly – no OpenAI SDK needed
+    const resp = await fetch(`${OPENAI_API_BASE}/workflows/runs`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY ?? ""}`,
+        // If workflows require a beta header, this is the one.
+        // Worst case, OpenAI will return a clear error and we’ll see it in `details`.
+        "OpenAI-Beta": "workflows=v1",
+      },
+      body: JSON.stringify({
+        workflow_id: workflowId,
+        inputs,
+      }),
+    });
+
+    const data = await resp.json().catch(() => null);
+
+    if (!resp.ok) {
+      // Bubble up whatever OpenAI says so you can see it in DevTools → Network
+      return NextResponse.json(
+        {
+          error: "OpenAI workflows API error",
+          status: resp.status,
+          details: data,
+        },
+        { status: 500 }
       );
     }
 
-    // @ts-ignore – workflows types may lag SDK features
-    const run = await anyClient.workflows.runs.create({
-      workflow_id: workflowId,
-      inputs,
-    });
-
-    return NextResponse.json(run, { status: 200 });
+    // Success – send the full run object back
+    return NextResponse.json(data, { status: 200 });
   } catch (error: any) {
     console.error("Error running workflow:", error);
 
