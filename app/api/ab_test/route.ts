@@ -1,4 +1,5 @@
-// app/api/ab_test/route.ts
+/* eslint-disable @typescript-eslint/ban-ts-comment, @typescript-eslint/no-explicit-any */
+
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 
